@@ -587,8 +587,6 @@ def get_group_center(locs, group_ids):
             i] = group_centers[group_id_dict[gid]] / group_id_num_dict[gid]
     return group_centers_ret, group_id_num_dict
 
-
-
 def noise_per_object_v3_(gt_boxes,
                          points=None,
                          valid_mask=None,
