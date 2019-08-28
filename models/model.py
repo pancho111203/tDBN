@@ -21,8 +21,7 @@ import operator
 import torch
 import warnings
 #from torch.nn.parallel.data_parallel import *
-from tDBN.models import tDBN, voxelization, det_net
-
+from tDBN.models import tDBN, voxelization, det_net, PGE, second_rpns, tDBN_own, FE_own, RPN_own
 
 def _get_pos_neg_loss(cls_loss, labels):
     # cls_loss: [N, num_anchors, num_class]
@@ -157,17 +156,26 @@ class Model(nn.Module):
             "tDBN_2": tDBN.tDBN_2,
             "tDBN_bv_1": tDBN.tDBN_bv_1,
             "tDBN_bv_2": tDBN.tDBN_bv_2,
+            "PGE": PGE.PointGridExtractor,
+            "own_1_bigkernels": tDBN_own.own_1_bigkernels,
+            "own_2_bigkernels": tDBN_own.own_2_bigkernels,
+            "Pyramid": FE_own.Pyramid
         }
         tdbn_class = tdbn_class_dict[tdbn_name]
         self.tdbn_feature_extractor = tdbn_class(
             output_shape,
             use_norm,
             num_filters_down1=tdbn_filters_d1,
-            num_filters_down2=tdbn_filters_d2)
+            num_filters_down2=tdbn_filters_d2,
+            num_input_features=self._num_input_features,
+            num_filters_det=det_net_num_filters,
+            num_upsample_filters_det=det_net_num_upsample_filters)
 
         det_net_class_dict = {
             "det_net": det_net.det_net,
             "det_net_2": det_net.det_net_2,
+            "SECOND_RPNV2": second_rpns.RPNV2,
+            "Direct": RPN_own.Direct
         }
         det_net_class = det_net_class_dict[det_net_name]
         self.det_net = det_net_class(
@@ -177,6 +185,7 @@ class Model(nn.Module):
             layer_strides=det_net_layer_strides,
             num_filters=det_net_num_filters,
             upsample_strides=det_net_upsample_strides,
+            num_input_features=self._num_input_features,
             num_upsample_filters=det_net_num_upsample_filters,
             num_anchor_per_loc=target_assigner.num_anchors_per_location,
             encode_background_as_zeros=encode_background_as_zeros,

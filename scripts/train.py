@@ -248,10 +248,13 @@ def train(config_path,
                     print("end epoch")
                     if clear_metrics_every_epoch:
                         net.clear_metrics()
+                        print('after_clear_metrics')
                     data_iter = iter(dataloader)
+                    print('after_data_iter')
                     example = next(data_iter)
+                    print('after_example')
                 example_torch = example_convert_to_torch(example, float_dtype)
-
+                
                 batch_size = example["anchors"].shape[0]
                 ret_dict = net(example_torch)
                 cls_preds = ret_dict["cls_preds"]

@@ -28,7 +28,8 @@ class tDBN_1(nn.Module):
                  use_norm=True,
                  num_filters_down1=[ 64, 128, 256, 512],
                  num_filters_down2=[ 64, 128, 256, 512],
-                 name='tDBN_1'):
+                 name='tDBN_1',
+                 **kwargs):
         super(tDBN_1, self).__init__()
         self.name = name
         if use_norm:
@@ -163,7 +164,8 @@ class tDBN_2(nn.Module):
                  use_norm=True,
                  num_filters_down1=[ 32, 64, 96, 128],
                  num_filters_down2=[ 32, 64, 96, 128],
-                 name='tDBN_2'):
+                 name='tDBN_2',
+                 **kwargs):
         super(tDBN_2, self).__init__()
         self.name = name
         if use_norm:
@@ -339,7 +341,8 @@ class tDBN_bv_1(nn.Module):
                  use_norm=True,
                  num_filters_down1=[ 32, 64, 96, 128],
                  num_filters_down2=[ 32, 64, 96, 128],
-                 name='tDBN_bv_1'):
+                 name='tDBN_bv_1',
+                 **kwargs):
         super(tDBN_bv_1, self).__init__()
         self.name = name
         if use_norm:
@@ -498,7 +501,8 @@ class tDBN_bv_2(nn.Module):
                  use_norm=True,
                  num_filters_down1=[ 32, 64, 96, 128],
                  num_filters_down2=[ 32, 64, 96, 128],
-                 name='tDBN_bv_2'):
+                 name='tDBN_bv_2',
+                 **kwargs):
         super(tDBN_bv_2, self).__init__()
         self.name = name
         if use_norm:

@@ -39,7 +39,8 @@ class det_net(nn.Module):
                  num_groups=32,
                  use_bev=False,
                  box_code_size=7,
-                 name='det_net'):
+                 name='det_net',
+                 **kwargs):
         super(det_net, self).__init__()
         self._num_anchor_per_loc = num_anchor_per_loc
         self._use_direction_classifier = use_direction_classifier
@@ -219,7 +220,8 @@ class det_net_2(nn.Module):
                  num_groups=32,
                  use_bev=False,
                  box_code_size=7,
-                 name='det_net_2'):
+                 name='det_net_2',
+                 **kwargs):
         super(det_net_2, self).__init__()
         self._num_anchor_per_loc = num_anchor_per_loc
         self._use_direction_classifier = use_direction_classifier

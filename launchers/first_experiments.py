@@ -13,11 +13,13 @@ def _get_command_config(config, output=None):
         output = config
     output_dir = '/home/franciscorubin/Projects/TFM/tDBN/results/{}'.format(output)
     stdout = output_dir + '/out.txt'
+    stderr = output_dir + '/err.txt'
 
-    command = 'python {} {} --config_path={} --model_dir={}'.format(code, mode, config_path, output_dir)
+    command = 'python -u {} {} --config_path={} --model_dir={}'.format(code, mode, config_path, output_dir)
     return {
         'command': command,
-        'stdout': stdout
+        'stdout': stdout,
+        'stderr': stderr
     }
 
 def setup():
