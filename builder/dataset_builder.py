@@ -54,11 +54,13 @@ def build(input_reader_config,
     without_reflectivity = model_config.without_reflectivity
     num_point_features = model_config.num_point_features
 
-    out_size_factor = 32
-    # if model_config.voxel_generator.voxel_size[0]<0.16:
-    #     out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]
-    # else:
-    #     out_size_factor = model_config.det_net.layer_strides[0] // model_config.det_net.upsample_strides[0]
+    
+    if model_config.tdbnet.module_class_name == 'Pyramid':
+        out_size_factor = 32
+    elif model_config.voxel_generator.voxel_size[0]<0.16:
+        out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]
+    else:
+        out_size_factor = model_config.det_net.layer_strides[0] // model_config.det_net.upsample_strides[0]
     print('Need to correct out size factor manually: {}'.format(out_size_factor))
 
     cfg = input_reader_config
