@@ -45,6 +45,7 @@ class Direct(nn.Module):
                  output_channels = 256, # TODO channels gotten from feature extractor
                  **kwargs):
         super(Direct, self).__init__()
+        self.name = name
         self._num_anchor_per_loc = num_anchor_per_loc
         self._use_direction_classifier = use_direction_classifier
         self._use_bev = use_bev
@@ -76,7 +77,7 @@ class Direct(nn.Module):
             "cls_preds": cls_preds,
         }
         if self._use_direction_classifier:
-            dir_cls_preds = self.conv_dir_cls(xx)
+            dir_cls_preds = self.conv_dir_cls(out)
             dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous()
             ret_dict["dir_cls_preds"] = dir_cls_preds
         return ret_dict

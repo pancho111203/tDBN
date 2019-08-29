@@ -23,16 +23,16 @@ import warnings
 from torch.nn.parallel.data_parallel import *
 
 
-class own_1_bigkernels(nn.Module):
+class Own_1_bigkernels(nn.Module):
     def __init__(self,
                  output_shape,
                  use_norm=True,
                  num_filters_down1=[ 32, 64, 96, 128],
-                 own_1_bigkernels=[ 32, 64, 96, 128],
-                 name='tDBN_bv_1',
-                 kernel_sizes=[15, 15, 11, 7, 5, 3, 3]
+                 num_filters_down2=[ 32, 64, 96, 128],
+                 name='Own_1_bigkernels',
+                 kernel_sizes=[15, 15, 11, 7, 5, 3, 3],
                  **kwargs):
-        super(own_1_bigkernels, self).__init__()
+        super(Own_1_bigkernels, self).__init__()
         self.name = name
         if use_norm:
             BatchNorm1d = change_default_args(
@@ -189,17 +189,17 @@ class own_1_bigkernels(nn.Module):
 
 
 
-class own_2_bigkernels(nn.Module):
+class Own_2_bigkernels(nn.Module):
     def __init__(self,
                  output_shape,
                  use_norm=True,
                  num_filters_down1=[ 32, 64, 96, 128],
                  num_filters_down2=[ 32, 64, 96, 128],
-                 name='own_2_bigkernels',
+                 name='Own_2_bigkernels',
                  kernel_sizes=[15, 15, 11, 7, 5, 3, 3],
-                 concate_kernel_sizes=[3, 3, 5]
+                 concate_kernel_sizes=[3, 3, 5],
                  **kwargs):
-        super(own_2_bigkernels, self).__init__()
+        super(Own_2_bigkernels, self).__init__()
         self.name = name
         if use_norm:
             BatchNorm1d = change_default_args(

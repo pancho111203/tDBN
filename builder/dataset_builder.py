@@ -53,10 +53,13 @@ def build(input_reader_config,
     generate_bev = model_config.use_bev
     without_reflectivity = model_config.without_reflectivity
     num_point_features = model_config.num_point_features
-    if model_config.voxel_generator.voxel_size[0]<0.16:
-        out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]
-    else:
-        out_size_factor = model_config.det_net.layer_strides[0] // model_config.det_net.upsample_strides[0]
+
+    out_size_factor = 32
+    # if model_config.voxel_generator.voxel_size[0]<0.16:
+    #     out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]
+    # else:
+    #     out_size_factor = model_config.det_net.layer_strides[0] // model_config.det_net.upsample_strides[0]
+    print('Need to correct out size factor manually: {}'.format(out_size_factor))
 
     cfg = input_reader_config
     db_sampler_cfg = input_reader_config.database_sampler

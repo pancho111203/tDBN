@@ -23,7 +23,7 @@ def _get_command_config(config, output=None):
     }
 
 def setup():
-    exps = ['car_tDBN_bv_1_noDA', 'car_tDBN_bv_2_noDA', 'car_tDBN_vef_1_noDA', 'car_tDBN_vef_2_noDA']
+    exps = ['car_tDBN_bv_1_noDA', 'car_tDBN_bv_2_noDA', 'TODO_car_own1bigkernels_det2', 'TODO_car_own2bigkernels_det2.config']
     configs = [_get_command_config(exp) for exp in exps]
 
     generate_launcher(configs, task_config_filepath)

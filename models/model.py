@@ -157,8 +157,8 @@ class Model(nn.Module):
             "tDBN_bv_1": tDBN.tDBN_bv_1,
             "tDBN_bv_2": tDBN.tDBN_bv_2,
             "PGE": PGE.PointGridExtractor,
-            "own_1_bigkernels": tDBN_own.own_1_bigkernels,
-            "own_2_bigkernels": tDBN_own.own_2_bigkernels,
+            "Own_1_bigkernels": tDBN_own.Own_1_bigkernels,
+            "Own_2_bigkernels": tDBN_own.Own_2_bigkernels,
             "Pyramid": FE_own.Pyramid
         }
         tdbn_class = tdbn_class_dict[tdbn_name]

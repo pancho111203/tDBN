@@ -20,9 +20,33 @@ import torch
 import warnings
 from torch.nn.parallel.data_parallel import *
 
-
+# TODO output % sparsity and dimensions after every layer to see if changes need to be made
 def debug(txt):
-    print(txt)
+    # print(txt)
+    pass
+
+class ListModule(nn.Module):
+    def __init__(self, *args):
+        super(ListModule, self).__init__()
+        idx = 0
+        for module in args:
+            self.add_module(str(idx), module)
+            idx += 1
+
+    def __getitem__(self, idx):
+        if idx < 0 or idx >= len(self._modules):
+            raise IndexError('index {} is out of range'.format(idx))
+        it = iter(self._modules.values())
+        for i in range(idx):
+            next(it)
+        return next(it)
+
+    def __iter__(self):
+        return iter(self._modules.values())
+
+    def __len__(self):
+        return len(self._modules)
+
 
 class Pyramid(nn.Module):
     def __init__(self,
@@ -34,9 +58,9 @@ class Pyramid(nn.Module):
                  layers_per_block = 2, # each layer consists of 2 sscnn if use residual is true, and 1 if false
                  downsample_type='max_pool2',
                  leakiness=0,
-                 dense_blocks=[(192, 3, (2, 1, 1)), (224, 3, (2, 1, 1)), (256, 3, (2, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
+                 dense_blocks=[(192, (3, 3, 3), (2, 1, 1)), (224, (3, 3, 3), (2, 1, 1)), (256, (3, 3, 3), (1, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
                  out_filters=512,
-                 final_z_dim=12, # TODO URG obtain from dense block output
+                #  final_z_dim=12,
                  **kwargs):
         super(Pyramid, self).__init__()
         self.name = name
@@ -58,6 +82,9 @@ class Pyramid(nn.Module):
 
         sparse_shape = np.array(output_shape[1:4]) # + [1, 0, 0]   
         
+        self.scn_input = scn.InputLayer(3, sparse_shape.tolist())
+        self.voxel_output_shape = output_shape
+
         m = scn.Sequential()
         (num_filters, kernel_size) = blocks[0]
 
@@ -74,30 +101,49 @@ class Pyramid(nn.Module):
             m = scn.Sequential()
             # downsample
             m.add(scn.BatchNormLeakyReLU(prev_num_filters ,leakiness=leakiness))
-            m.add(Downsample)
-
-            for _ in range(layers_per_block):
+            m.add(Downsample())
+            
+            self.block(m, prev_num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
+            for _ in range(layers_per_block-1):
                 self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
 
             self.block_models.append(m)
             prev_num_filters = num_filters
 
+        self.block_models.append(scn.Sequential().add(scn.BatchNormLeakyReLU(prev_num_filters, leakiness=leakiness)).add(Downsample()))
+        self.block_models = ListModule(*self.block_models)
 
-        # TODO use CNNBLOCK if sparsity is low enough
-        self.dense_block = scn.Sequential()
-        self.dense_block.add(scn.BatchNormLeakyReLU(prev_num_filters , leakiness=leakiness))
-        self.dense_block.add(Downsample)
+        # this version uses CNNBLOCK if sparsity is low enough
+        self.sparse_to_dense = scn.SparseToDense(3, prev_num_filters)
 
-        for (num_filters, kernel, stride) in range(0, final_scnns):
-            self.dense_block.add(scn.Convolution(3, prev_num_filters, num_filters, kernel, stride, bias=False))
-            self.dense_block.add(scn.BatchNormLeakyReLU(num_filters, leakiness=leakiness))
+        self.dense_block = []
+        for (num_filters, kernel, stride) in dense_blocks:
+            pad = tuple(((np.array(list(kernel)) - 1) / 2).astype(np.int))
+            m = nn.Sequential(
+                nn.Conv3d(prev_num_filters, num_filters, kernel, stride, padding=pad),
+                nn.BatchNorm3d(num_filters),
+                nn.LeakyReLU(negative_slope=leakiness)
+            )
+            self.dense_block.append(m)
             prev_num_filters = num_filters
-            # TODO should i keep downsampling here??? check
 
-        self.z_combiner = scn.Sequential()
-        self.z_combiner.add(scn.Convolution(3, prev_num_filters, out_filters, (final_z_dim, 1, 1), (1, 1, 1), bias=False))
-        self.z_combiner.add(scn.BatchNormLeakyReLU(out_filters, leakiness=leakiness))
-        self.z_combiner.add(scn.SparseToDense(3, out_filters)) #TODO should this be 2D instead of 3d??
+        self.dense_block = ListModule(*self.dense_block)
+
+        # ## this version used SCNN instead of normal CNN
+        # self.dense_block = scn.Sequential()
+        # self.dense_block.add(scn.BatchNormLeakyReLU(prev_num_filters , leakiness=leakiness))
+        # self.dense_block.add(Downsample())
+
+        # for (num_filters, kernel, stride) in dense_blocks:
+        #     self.dense_block.add(scn.Convolution(3, prev_num_filters, num_filters, kernel, stride, bias=False))
+        #     self.dense_block.add(scn.BatchNormLeakyReLU(num_filters, leakiness=leakiness))
+        #     prev_num_filters = num_filters
+        #     # TODO should i keep downsampling here??? check
+
+        # self.z_combiner = scn.Sequential()
+        # self.z_combiner.add(scn.Convolution(3, prev_num_filters, out_filters, (final_z_dim, 1, 1), (1, 1, 1), bias=False))
+        # self.z_combiner.add(scn.BatchNormLeakyReLU(out_filters, leakiness=leakiness))
+        # self.z_combiner.add(scn.SparseToDense(3, out_filters)) #TODO should this be 2D instead of 3d??
 
 
     # NOTE: this blocks start with BatchNorm+ReLu and end without
@@ -120,8 +166,6 @@ class Pyramid(nn.Module):
         coors = coors.int()[:, [1, 2, 3, 0]]
         ret = self.scn_input((coors.cpu(), voxel_features, batch_size))
 
-        # TODO output % sparsity and dimensions after every layer to see if changes need to be made
-
         debug('Input:')
         debug(ret)
 
@@ -129,18 +173,26 @@ class Pyramid(nn.Module):
             ret = model(ret)
             debug('{} block output:'.format(k))
             debug(ret)
+        # out: [  8, 200, 176]
 
-        ret = self.dense_block(ret)
+        # ret = self.dense_block(ret)
 
-        debug('Dense Block output:')
-        debug(ret)
+        # debug('Dense Block output:')
+        # debug(ret)
 
-        ret = self.z_combiner(ret)
+        # ret = self.z_combiner(ret)
 
-        N, C, D, H, W = ret.shape
-        debug('Return Shape: {}'.format(ret.shape))
-        
+        ret = self.sparse_to_dense(ret)
+        debug('Dense return shape: {}'.format(ret.shape))
+
+        for k, model in enumerate(self.dense_block):
+            ret = model(ret)
+            debug('Dense block {} return shape: {}'.format(k, ret.shape))
+
+        # TODO global maxpool just in case it's not 1
+
+        N, C, D, H, W = ret.shape      
         output = ret.view(N, C*D, H, W)
-        print('TODO: ensure that the feature map is of a good size for the RCNN')
-        print('Size: {}'.format(output.shape))
+        #TODO ensure that the feature map is of a good size for the RCNN'
+        debug('Size: {}'.format(output.shape))
         return output
