@@ -54,12 +54,12 @@ class Pyramid(nn.Module):
                  use_norm=True,
                  name='Pyramid',
                  use_residual=True,
-                 blocks = [(32, 15), (64, 11), (96, 7), (128, 5), (160, 3)], # define blocks, the tuple represent (num_filters, kernel). (blocks are divided by one downsample op)
+                 blocks = [(64, 15), (96, 11), (128, 7), (192, 5)], # define blocks, the tuple represent (num_filters, kernel). (blocks are divided by one downsample op)
                  layers_per_block = 2, # each layer consists of 2 sscnn if use residual is true, and 1 if false
                  downsample_type='max_pool2',
                  leakiness=0,
-                 dense_blocks=[(192, (3, 3, 3), (2, 1, 1)), (224, (3, 3, 3), (2, 1, 1)), (256, (3, 3, 3), (1, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
-                 out_filters=512,
+                 dense_blocks=[(224, (3, 3, 3), (2, 1, 1)), (256, (3, 3, 3), (2, 1, 1)), (384, (3, 3, 3), (2, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
+                #  out_filters=512,
                 #  final_z_dim=12,
                  **kwargs):
         super(Pyramid, self).__init__()

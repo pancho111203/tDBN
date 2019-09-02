@@ -56,7 +56,7 @@ def build(input_reader_config,
 
     
     if model_config.tdbnet.module_class_name == 'Pyramid':
-        out_size_factor = 32
+        out_size_factor = 16
     elif model_config.voxel_generator.voxel_size[0]<0.16:
         out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]
     else:
