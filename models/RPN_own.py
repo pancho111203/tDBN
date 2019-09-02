@@ -42,7 +42,7 @@ class Direct(nn.Module):
                  use_bev=False,
                  box_code_size=7,
                  name='Direct',
-                 output_channels = 256, # TODO channels gotten from feature extractor
+                 output_channels = 384, # TODO channels gotten from feature extractor
                  **kwargs):
         super(Direct, self).__init__()
         self.name = name
