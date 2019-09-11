@@ -88,7 +88,7 @@ class Pyramid(nn.Module):
         m = scn.Sequential()
         (num_filters, kernel_size) = blocks[0]
 
-        self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
+        self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=False)
         for _ in range(layers_per_block-1):
             self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
 
@@ -147,19 +147,24 @@ class Pyramid(nn.Module):
 
 
     # NOTE: this blocks start with BatchNorm+ReLu and end without
-    def block(self, m, a, b, dimension=3, residual_blocks=False, leakiness=0, kernel_size=3):  # default using residual_block
+    def block(self, m, a, b, dimension=3, residual_blocks=False, leakiness=0, kernel_size=3, use_batch_norm=True):  # default using residual_block
+        if use_batch_norm:
+            Activation = lambda channels: scn.BatchNormLeakyReLU(channels,leakiness=leakiness)
+        else:
+            Activation = lambda channels: scn.LeakyReLU(leakiness)
+
         if residual_blocks: #ResNet style blocks
             m.add(scn.ConcatTable()
                   .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, False))
                   .add(scn.Sequential()
-                    .add(scn.BatchNormLeakyReLU(a,leakiness=leakiness))
+                    .add(Activation(a))
                     .add(scn.SubmanifoldConvolution(dimension, a, b, kernel_size, False))
-                    .add(scn.BatchNormLeakyReLU(b,leakiness=leakiness))
+                    .add(Activation(b))
                     .add(scn.SubmanifoldConvolution(dimension, b, b, kernel_size, False)))
              ).add(scn.AddTable())
         else: #VGG style blocks
             m.add(scn.Sequential()
-                 .add(scn.BatchNormLeakyReLU(a,leakiness=leakiness))
+                 .add(Activation(a))
                  .add(scn.SubmanifoldConvolution(dimension, a, b, kernel_size, False)))
 
     def forward(self, voxel_features, coors, batch_size):
