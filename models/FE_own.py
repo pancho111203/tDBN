@@ -20,10 +20,23 @@ import torch
 import warnings
 from torch.nn.parallel.data_parallel import *
 
-# TODO output % sparsity and dimensions after every layer to see if changes need to be made
+# TODO create visualization of sparsity map (showing sparsity changes per layer)
 def debug(txt):
-    # print(txt)
-    pass
+    print(txt)
+
+def get_sparsity(tensor):
+    if isinstance(tensor, scn.SparseConvNetTensor):
+        sl = tensor.get_spatial_locations()
+        non_zero = float((sl[:, 3] == 0).sum()) # only from 1st element of batch
+        total = float(reduce(lambda x, y: x * y, tensor.spatial_size))
+        print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
+    elif isinstance(tensor, torch.Tensor):
+        non_zero = float(len(torch.nonzero(tensor[0].sum(dim=0)))) # only from 1st element of batch
+        print(tensor[0].sum(dim=0))
+        total = float(reduce(lambda x, y: x * y, tensor.shape[2:]))
+        print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
+    else:
+        print('Cant get sparsity for type: {}'.format(type(tensor)))
 
 class ListModule(nn.Module):
     def __init__(self, *args):
@@ -61,6 +74,7 @@ class Pyramid(nn.Module):
                  dense_blocks=[(224, (3, 3, 3), (2, 1, 1)), (256, (3, 3, 3), (2, 1, 1)), (384, (3, 3, 3), (2, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
                 #  out_filters=512,
                 #  final_z_dim=12,
+                dense_bias=False,
                  **kwargs):
         super(Pyramid, self).__init__()
         self.name = name
@@ -120,8 +134,8 @@ class Pyramid(nn.Module):
         for (num_filters, kernel, stride) in dense_blocks:
             pad = tuple(((np.array(list(kernel)) - 1) / 2).astype(np.int))
             m = nn.Sequential(
-                nn.Conv3d(prev_num_filters, num_filters, kernel, stride, padding=pad),
-                nn.BatchNorm3d(num_filters),
+                nn.Conv3d(prev_num_filters, num_filters, kernel, stride, padding=pad, bias=dense_bias),
+                # nn.BatchNorm3d(num_filters),
                 nn.LeakyReLU(negative_slope=leakiness)
             )
             self.dense_block.append(m)
@@ -173,11 +187,13 @@ class Pyramid(nn.Module):
 
         debug('Input:')
         debug(ret)
+        get_sparsity(ret)
 
         for k, model in enumerate(self.block_models):
             ret = model(ret)
             debug('{} block output:'.format(k))
             debug(ret)
+            get_sparsity(ret)
         # out: [  8, 200, 176]
 
         # ret = self.dense_block(ret)
@@ -189,10 +205,12 @@ class Pyramid(nn.Module):
 
         ret = self.sparse_to_dense(ret)
         debug('Dense return shape: {}'.format(ret.shape))
+        get_sparsity(ret)
 
         for k, model in enumerate(self.dense_block):
             ret = model(ret)
             debug('Dense block {} return shape: {}'.format(k, ret.shape))
+            get_sparsity(ret)
 
         # TODO global maxpool just in case it's not 1
 
