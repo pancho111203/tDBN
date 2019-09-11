@@ -55,7 +55,7 @@ def build(input_reader_config,
     num_point_features = model_config.num_point_features
 
     
-    if model_config.tdbnet.module_class_name == 'Pyramid':
+    if model_config.tdbnet.module_class_name == 'Pyramid' or model_config.tdbnet.module_class_name == 'Pyramid_Light':
         out_size_factor = 16
     elif model_config.voxel_generator.voxel_size[0]<0.16:
         out_size_factor = 0.4/model_config.voxel_generator.voxel_size[0]

@@ -265,7 +265,6 @@ def train(config_path,
                 cls_neg_loss = ret_dict["cls_neg_loss"]
                 loc_loss = ret_dict["loc_loss"]
                 cls_loss = ret_dict["cls_loss"]
-                dir_loss_reduced = ret_dict["dir_loss_reduced"]
                 cared = ret_dict["cared"]
                 labels = example_torch["labels"]
                 if train_cfg.enable_mixed_precision:
@@ -304,6 +303,7 @@ def train(config_path,
                     metrics["loss"]["cls_neg_rt"] = float(
                         cls_neg_loss.detach().cpu().numpy())
                     if model_cfg.use_direction_classifier:
+                        dir_loss_reduced = ret_dict["dir_loss_reduced"]
                         metrics["loss"]["dir_rt"] = float(
                             dir_loss_reduced.detach().cpu().numpy())
                     metrics["num_vox"] = int(example_torch["voxels"].shape[0])

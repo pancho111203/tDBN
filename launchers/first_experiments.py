@@ -23,8 +23,8 @@ def _get_command_config(config, output=None):
     }
 
 def setup():
-    exps = ['car_own1bigkernels_det2', 'car_own2bigkernels_det2']
-    configs = [_get_command_config(exp) for exp in exps]
+    exps = [('car_Pyramid_Light_Direct', 'car_Pyramid_LightBNAllExceptFirst_Direct'), ('car_Pyramid_LightNoBN_Direct', None)]
+    configs = [_get_command_config(exp, output) for exp, output in exps]
 
     generate_launcher(configs, task_config_filepath)
 
