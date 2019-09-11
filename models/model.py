@@ -159,7 +159,9 @@ class Model(nn.Module):
             "PGE": PGE.PointGridExtractor,
             "Own_1_bigkernels": tDBN_own.Own_1_bigkernels,
             "Own_2_bigkernels": tDBN_own.Own_2_bigkernels,
-            "Pyramid": FE_own.Pyramid
+            "Pyramid": FE_own.Pyramid,
+            "Pyramid_Light": FE_own.Pyramid_Light,
+            "Pyramid_LightNoBN": FE_own.Pyramid_LightNoBN
         }
         tdbn_class = tdbn_class_dict[tdbn_name]
         self.tdbn_feature_extractor = tdbn_class(
@@ -175,7 +177,8 @@ class Model(nn.Module):
             "det_net": det_net.det_net,
             "det_net_2": det_net.det_net_2,
             "SECOND_RPNV2": second_rpns.RPNV2,
-            "Direct": RPN_own.Direct
+            "Direct": RPN_own.Direct,
+            "Direct_Light": RPN_own.Direct_Light
         }
         det_net_class = det_net_class_dict[det_net_name]
         self.det_net = det_net_class(
@@ -282,18 +285,30 @@ class Model(nn.Module):
                     dir_logits, dir_targets, weights=weights)
                 dir_loss = dir_loss.sum() / batch_size_dev
                 loss += dir_loss * self._direction_loss_weight
-            return {
-                "loss": loss,
-                "cls_loss": cls_loss,
-                "loc_loss": loc_loss,
-                "cls_pos_loss": cls_pos_loss,
-                "cls_neg_loss": cls_neg_loss,
-                "cls_preds": cls_preds,
-                "dir_loss_reduced": dir_loss,
-                "cls_loss_reduced": cls_loss_reduced,
-                "loc_loss_reduced": loc_loss_reduced,
-                "cared": cared,
-            }
+                return {
+                    "loss": loss,
+                    "cls_loss": cls_loss,
+                    "loc_loss": loc_loss,
+                    "cls_pos_loss": cls_pos_loss,
+                    "cls_neg_loss": cls_neg_loss,
+                    "cls_preds": cls_preds,
+                    "dir_loss_reduced": dir_loss,
+                    "cls_loss_reduced": cls_loss_reduced,
+                    "loc_loss_reduced": loc_loss_reduced,
+                    "cared": cared,
+                }
+            else:
+                return {
+                    "loss": loss,
+                    "cls_loss": cls_loss,
+                    "loc_loss": loc_loss,
+                    "cls_pos_loss": cls_pos_loss,
+                    "cls_neg_loss": cls_neg_loss,
+                    "cls_preds": cls_preds,
+                    "cls_loss_reduced": cls_loss_reduced,
+                    "loc_loss_reduced": loc_loss_reduced,
+                    "cared": cared,
+                }
         else:
             return self.predict(example, preds_dict)
 
