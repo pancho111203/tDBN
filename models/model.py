@@ -23,6 +23,20 @@ import warnings
 #from torch.nn.parallel.data_parallel import *
 from tDBN.models import tDBN, voxelization, det_net, PGE, second_rpns, tDBN_own, FE_own, RPN_own
 
+def convert_norm_to_float_aux(net):
+    '''
+    BatchNorm layers to have parameters in single precision.
+    Find all layers and convert them back to float. This can't
+    be done with built in .apply as that function will apply
+    fn to all modules, parameters, and buffers. Thus we wouldn't
+    be able to guard the float conversion based on the module type.
+    '''
+    if isinstance(net, torch.nn.modules.batchnorm._BatchNorm):
+        net.float()
+    for child in net.children():
+        convert_norm_to_float_aux(child)
+    return net
+
 def _get_pos_neg_loss(cls_loss, labels):
     # cls_loss: [N, num_anchors, num_class]
     # labels: [N, num_anchors]
@@ -603,11 +617,7 @@ class Model(nn.Module):
         fn to all modules, parameters, and buffers. Thus we wouldn't
         be able to guard the float conversion based on the module type.
         '''
-        if isinstance(net, torch.nn.modules.batchnorm._BatchNorm):
-            net.float()
-        for child in net.children():
-            VoxelNet.convert_norm_to_float(net)
-        return net
+        return convert_norm_to_float_aux(net)
 
 
 def add_sin_difference(boxes1, boxes2):

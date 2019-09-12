@@ -172,7 +172,6 @@ def train(config_path,
     ######################
     # PREPARE INPUT
     ######################
-
     dataset = input_reader_builder.build(
         input_cfg,
         model_cfg,
@@ -191,6 +190,10 @@ def train(config_path,
         np.random.seed(time_seed + worker_id)
         print(f"WORKER {worker_id} seed:", np.random.get_state()[1][0])
 
+    # print('WARNING: shuffle disabled on train, set to true when doing real training')
+    # print('WARNING: shuffle disabled on train, set to true when doing real training')
+    # print('WARNING: shuffle disabled on train, set to true when doing real training')
+    # print('WARNING: shuffle disabled on train, set to true when doing real training')
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=input_cfg.batch_size,

@@ -22,22 +22,23 @@ from torch.nn.parallel.data_parallel import *
 
 # TODO create visualization of sparsity map (showing sparsity changes per layer)
 def debug(txt):
-    print(txt)
+    # print(txt)
+    pass
 
 def get_sparsity(tensor):
-    if isinstance(tensor, scn.SparseConvNetTensor):
-        sl = tensor.get_spatial_locations()
-        non_zero = float((sl[:, 3] == 0).sum()) # only from 1st element of batch
-        total = float(reduce(lambda x, y: x * y, tensor.spatial_size))
-        print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
-    elif isinstance(tensor, torch.Tensor):
-        non_zero = float(len(torch.nonzero(tensor[0].sum(dim=0)))) # only from 1st element of batch
-        print(tensor[0].sum(dim=0))
-        total = float(reduce(lambda x, y: x * y, tensor.shape[2:]))
-        print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
-    else:
-        print('Cant get sparsity for type: {}'.format(type(tensor)))
-
+    # if isinstance(tensor, scn.SparseConvNetTensor):
+    #     sl = tensor.get_spatial_locations()
+    #     non_zero = float((sl[:, 3] == 0).sum()) # only from 1st element of batch
+    #     total = float(reduce(lambda x, y: x * y, tensor.spatial_size))
+    #     print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
+    # elif isinstance(tensor, torch.Tensor):
+    #     non_zero = float(len(torch.nonzero(tensor[0].sum(dim=0)))) # only from 1st element of batch
+    #     total = float(reduce(lambda x, y: x * y, tensor.shape[2:]))
+    #     print('non_zero: {}, total: {}, sparsity: {:.10f}'.format(non_zero, total, non_zero/total))
+    # else:
+    #     print('Cant get sparsity for type: {}'.format(type(tensor)))
+    pass
+    
 class ListModule(nn.Module):
     def __init__(self, *args):
         super(ListModule, self).__init__()
@@ -64,7 +65,7 @@ class ListModule(nn.Module):
 class Pyramid(nn.Module):
     def __init__(self,
                  output_shape,
-                 use_norm=True,
+                 use_norm=False,
                  name='Pyramid',
                  use_residual=True,
                  blocks = [(64, 15), (96, 11), (128, 7), (192, 5)], # define blocks, the tuple represent (num_filters, kernel). (blocks are divided by one downsample op)
@@ -81,13 +82,12 @@ class Pyramid(nn.Module):
         self.use_residual = use_residual
         self.layers_per_block = layers_per_block
         self.blocks = blocks
+        use_norm = False # TODO this is invalidating config passed...
         if use_norm:
-            BatchNorm1d = change_default_args(
-                eps=1e-3, momentum=0.01)(nn.BatchNorm1d)
-            Linear = change_default_args(bias=False)(nn.Linear)
+            BatchNorm3d = nn.BatchNorm3d
         else:
-            BatchNorm1d = Empty
-            Linear = change_default_args(bias=True)(nn.Linear)
+            BatchNorm3d = Empty
+
         if downsample_type == 'max_pool2':
             Downsample = change_default_args(dimension=3, pool_size=(2, 2, 2), pool_stride=(2, 2, 2))(scn.MaxPooling)
         else:
@@ -104,7 +104,7 @@ class Pyramid(nn.Module):
 
         self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=False)
         for _ in range(layers_per_block-1):
-            self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
+            self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
 
         self.block_models = [m]
         prev_num_filters = num_filters
@@ -117,9 +117,9 @@ class Pyramid(nn.Module):
             m.add(scn.BatchNormLeakyReLU(prev_num_filters ,leakiness=leakiness))
             m.add(Downsample())
             
-            self.block(m, prev_num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
+            self.block(m, prev_num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
             for _ in range(layers_per_block-1):
-                self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
+                self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
 
             self.block_models.append(m)
             prev_num_filters = num_filters
@@ -135,7 +135,7 @@ class Pyramid(nn.Module):
             pad = tuple(((np.array(list(kernel)) - 1) / 2).astype(np.int))
             m = nn.Sequential(
                 nn.Conv3d(prev_num_filters, num_filters, kernel, stride, padding=pad, bias=dense_bias),
-                # nn.BatchNorm3d(num_filters),
+                BatchNorm3d(num_filters),
                 nn.LeakyReLU(negative_slope=leakiness)
             )
             self.dense_block.append(m)
