@@ -20,10 +20,12 @@ import torch
 import warnings
 from torch.nn.parallel.data_parallel import *
 
+# TODO subsparseconvnet blocks currently use no bias
+
 # TODO create visualization of sparsity map (showing sparsity changes per layer)
 def debug(txt):
     # print(txt)
-    pass
+   pass
 
 def get_sparsity(tensor):
     # if isinstance(tensor, scn.SparseConvNetTensor):
@@ -39,6 +41,26 @@ def get_sparsity(tensor):
     #     print('Cant get sparsity for type: {}'.format(type(tensor)))
     pass
     
+def get_neighbourhood_size(inp, kernel_size, batch_size, sparse_shape):
+    spatial_locations = inp.get_spatial_locations()[:, [3, 0, 1, 2]].cpu().numpy()
+    kernel_size = tuple([1] + list(kernel_size))                                                                                                                          
+    max_am = reduce(lambda x, y: x * y, kernel_size)
+
+    res = []
+    for i in range(spatial_locations.shape[0]):
+        value = spatial_locations[i]
+        cur = []
+
+        mids = ((np.array(list(kernel_size)) - 1) / 2).astype(int) 
+        max_values = np.array([batch_size] + list(sparse_shape)) 
+        mn = np.clip(value - mids, 0, max_values)        
+        mx = np.clip(value + mids, 0, max_values)
+
+        tot = (np.all(np.less_equal(spatial_locations, mx) & np.greater_equal(spatial_locations, mn), axis=1)).astype(int).sum()
+
+        res.append(tot)
+    return np.array(res)
+ 
 class ListModule(nn.Module):
     def __init__(self, *args):
         super(ListModule, self).__init__()
@@ -102,8 +124,10 @@ class Pyramid(nn.Module):
         m = scn.Sequential()
         (num_filters, kernel_size) = blocks[0]
 
-        self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=False)
-        for _ in range(layers_per_block-1):
+        self.binary_processor = scn.Sequential()
+        self.binary_processor.add(scn.SubmanifoldConvolution(3, 1, num_filters, kernel_size, False))
+
+        for _ in range(layers_per_block):
             self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
 
         self.block_models = [m]
@@ -189,6 +213,185 @@ class Pyramid(nn.Module):
         debug(ret)
         get_sparsity(ret)
 
+        ret = self.binary_processor(ret)
+        debug('Binary processor output:')
+        debug(ret)
+
+        for k, model in enumerate(self.block_models):
+            ret = model(ret)
+            debug('{} block output:'.format(k))
+            debug(ret)
+            get_sparsity(ret)
+        # out: [  8, 200, 176]
+
+        # ret = self.dense_block(ret)
+
+        # debug('Dense Block output:')
+        # debug(ret)
+
+        # ret = self.z_combiner(ret)
+
+        ret = self.sparse_to_dense(ret)
+        debug('Dense return shape: {}'.format(ret.shape))
+        get_sparsity(ret)
+
+        for k, model in enumerate(self.dense_block):
+            ret = model(ret)
+            debug('Dense block {} return shape: {}'.format(k, ret.shape))
+            get_sparsity(ret)
+
+        # TODO global maxpool just in case it's not 1
+
+        N, C, D, H, W = ret.shape      
+        output = ret.view(N, C*D, H, W)
+        #TODO ensure that the feature map is of a good size for the RCNN'
+        debug('Size: {}'.format(output.shape))
+        return output
+
+
+
+class Pyramid_ConvNorm(nn.Module):
+    def __init__(self,
+                 output_shape,
+                 use_norm=False,
+                 name='Pyramid_ConvNorm',
+                 use_residual=True,
+                 blocks = [(64, (15, 15, 15)), (96, 11), (128, 7), (192, 5)], # define blocks, the tuple represent (num_filters, kernel). (blocks are divided by one downsample op)
+                 layers_per_block = 2, # each layer consists of 2 sscnn if use residual is true, and 1 if false
+                 downsample_type='max_pool2',
+                 leakiness=0,
+                 dense_blocks=[(224, (3, 3, 3), (2, 1, 1)), (256, (3, 3, 3), (2, 1, 1)), (384, (3, 3, 3), (2, 1, 1))], # define final dense blocks, with (num_filters, kernel, stride)
+                #  out_filters=512,
+                #  final_z_dim=12,
+                dense_bias=False,
+                 **kwargs):
+        super(Pyramid_ConvNorm, self).__init__()
+        self.name = name
+        self.use_residual = use_residual
+        self.layers_per_block = layers_per_block
+        self.blocks = blocks
+        use_norm = False # TODO this is invalidating config passed...
+        if use_norm:
+            BatchNorm3d = nn.BatchNorm3d
+        else:
+            BatchNorm3d = Empty
+
+        if downsample_type == 'max_pool2':
+            Downsample = change_default_args(dimension=3, pool_size=(2, 2, 2), pool_stride=(2, 2, 2))(scn.MaxPooling)
+        else:
+            # scn.Convolution(dimension, num_filter_fpn[k-1], num_filter_fpn[k], 3, 2, False)
+            raise ValueError('Invalid downsample type')
+
+        self.sparse_shape = np.array(output_shape[1:4]) # + [1, 0, 0]   
+        
+        self.scn_input = scn.InputLayer(3, self.sparse_shape.tolist())
+        self.voxel_output_shape = output_shape
+
+        (num_filters, kernel_size) = blocks[0]
+
+        self.binary_processor = scn.Sequential()
+        self.binary_processor.add(scn.SubmanifoldConvolution(3, 1, num_filters, kernel_size, False))
+
+        m = scn.Sequential()
+        for _ in range(layers_per_block):
+            self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
+
+        self.block_models = [m]
+        prev_num_filters = num_filters
+
+        for k, (num_filters, kernel_size) in enumerate(blocks[1:]):
+            k = k + 1
+
+            m = scn.Sequential()
+            # downsample
+            m.add(scn.BatchNormLeakyReLU(prev_num_filters ,leakiness=leakiness))
+            m.add(Downsample())
+            
+            self.block(m, prev_num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
+            for _ in range(layers_per_block-1):
+                self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=use_norm)
+
+            self.block_models.append(m)
+            prev_num_filters = num_filters
+
+        self.block_models.append(scn.Sequential().add(scn.BatchNormLeakyReLU(prev_num_filters, leakiness=leakiness)).add(Downsample()))
+        self.block_models = ListModule(*self.block_models)
+
+        # this version uses CNNBLOCK if sparsity is low enough
+        self.sparse_to_dense = scn.SparseToDense(3, prev_num_filters)
+
+        self.dense_block = []
+        for (num_filters, kernel, stride) in dense_blocks:
+            pad = tuple(((np.array(list(kernel)) - 1) / 2).astype(np.int))
+            m = nn.Sequential(
+                nn.Conv3d(prev_num_filters, num_filters, kernel, stride, padding=pad, bias=dense_bias),
+                BatchNorm3d(num_filters),
+                nn.LeakyReLU(negative_slope=leakiness)
+            )
+            self.dense_block.append(m)
+            prev_num_filters = num_filters
+
+        self.dense_block = ListModule(*self.dense_block)
+
+        # ## this version used SCNN instead of normal CNN
+        # self.dense_block = scn.Sequential()
+        # self.dense_block.add(scn.BatchNormLeakyReLU(prev_num_filters , leakiness=leakiness))
+        # self.dense_block.add(Downsample())
+
+        # for (num_filters, kernel, stride) in dense_blocks:
+        #     self.dense_block.add(scn.Convolution(3, prev_num_filters, num_filters, kernel, stride, bias=False))
+        #     self.dense_block.add(scn.BatchNormLeakyReLU(num_filters, leakiness=leakiness))
+        #     prev_num_filters = num_filters
+        #     # TODO should i keep downsampling here??? check
+
+        # self.z_combiner = scn.Sequential()
+        # self.z_combiner.add(scn.Convolution(3, prev_num_filters, out_filters, (final_z_dim, 1, 1), (1, 1, 1), bias=False))
+        # self.z_combiner.add(scn.BatchNormLeakyReLU(out_filters, leakiness=leakiness))
+        # self.z_combiner.add(scn.SparseToDense(3, out_filters)) #TODO should this be 2D instead of 3d??
+
+
+    # NOTE: this blocks start with BatchNorm+ReLu and end without
+    def block(self, m, a, b, dimension=3, residual_blocks=False, leakiness=0, kernel_size=3, use_batch_norm=True):  # default using residual_block
+        if use_batch_norm:
+            Activation = lambda channels: scn.BatchNormLeakyReLU(channels,leakiness=leakiness)
+        else:
+            Activation = lambda channels: scn.LeakyReLU(leakiness)
+
+        if residual_blocks: #ResNet style blocks
+            m.add(scn.ConcatTable()
+                  .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, False))
+                  .add(scn.Sequential()
+                    .add(Activation(a))
+                    .add(scn.SubmanifoldConvolution(dimension, a, b, kernel_size, False))
+                    .add(Activation(b))
+                    .add(scn.SubmanifoldConvolution(dimension, b, b, kernel_size, False)))
+             ).add(scn.AddTable())
+        else: #VGG style blocks
+            m.add(scn.Sequential()
+                 .add(Activation(a))
+                 .add(scn.SubmanifoldConvolution(dimension, a, b, kernel_size, False)))
+
+    def forward(self, voxel_features, coors, batch_size):
+        coors = coors.int()[:, [1, 2, 3, 0]]
+        ret = self.scn_input((coors.cpu(), voxel_features, batch_size))
+
+        debug('Input:')
+        debug(ret)
+        get_sparsity(ret)
+
+        ret = self.binary_processor(ret)
+        nsizes = get_neighbourhood_size(ret, self.blocks[0][1], batch_size, self.sparse_shape)
+        debug('average values captured in sensory area: {}'.format(nsizes.mean()))
+        
+        debug('Binary processor output before normalization:')
+        debug(ret)
+
+        ret.features = torch.div(ret.features.transpose(0, 1), torch.tensor(nsizes).to(dtype=torch.float32, device=torch.device('cuda'))).transpose(0, 1)
+
+        debug('Binary processor output after normalization:')
+        debug(ret)
+        get_sparsity(ret)
+
         for k, model in enumerate(self.block_models):
             ret = model(ret)
             debug('{} block output:'.format(k))
@@ -262,7 +465,7 @@ class Pyramid_Light(nn.Module):
 
         m = scn.Sequential()
         (num_filters, kernel_size) = blocks[0]
-
+        # TODO fix, should add a subsparseconv
         self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size, use_batch_norm=False)
         for _ in range(layers_per_block-1):
             self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
@@ -415,7 +618,7 @@ class Pyramid_LightNoBN(nn.Module):
 
         m = scn.Sequential()
         (num_filters, kernel_size) = blocks[0]
-
+        # TODO fix, should add a subsparseconv
         self.block(m, 1, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
         for _ in range(layers_per_block-1):
             self.block(m, num_filters, num_filters, dimension=3, residual_blocks = use_residual, kernel_size=kernel_size)
