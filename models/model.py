@@ -176,7 +176,8 @@ class Model(nn.Module):
             "Pyramid": FE_own.Pyramid,
             "Pyramid_Light": FE_own.Pyramid_Light,
             "Pyramid_LightNoBN": FE_own.Pyramid_LightNoBN,
-            "Pyramid_ConvNorm": FE_own.Pyramid_ConvNorm
+            "Pyramid_ConvNorm": FE_own.Pyramid_ConvNorm,
+            "Pyramid_SlimKernels": FE_own.Pyramid_SlimKernels
         }
         tdbn_class = tdbn_class_dict[tdbn_name]
         self.tdbn_feature_extractor = tdbn_class(
